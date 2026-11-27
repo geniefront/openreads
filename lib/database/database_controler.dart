@@ -1,4 +1,5 @@
 import 'package:openreads/core/constants/enums/enums.dart';
+import 'package:openreads/core/helpers/merge_book_tags.dart';
 import 'package:openreads/core/helpers/helpers.dart';
 import 'package:openreads/database/database_provider.dart';
 import 'package:openreads/model/book.dart';
@@ -175,6 +176,43 @@ class DatabaseController {
           where: "id = ?", whereArgs: [id]);
     }
     return await batch.commit();
+  }
+
+  Future<int> mergeTags(String from, String into, Set<int> expectedIds) async {
+    final db = await dbClient.db;
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        'booksTable',
+        columns: ['id', 'tags'],
+        where: 'tags IS NOT NULL AND deleted = 0',
+      );
+
+      final affected = rows
+          .where((row) => bookTagNames(row['tags'] as String?).contains(from))
+          .toList();
+      final targetExists = rows
+          .any((row) => bookTagNames(row['tags'] as String?).contains(into));
+      if (from == into ||
+          !targetExists ||
+          affected.length != expectedIds.length ||
+          affected.any((row) => !expectedIds.contains(row['id']))) {
+        throw StateError(
+            'The merge preview is stale. Please refresh and try again.');
+      }
+      final dateModified = DateTime.now().toIso8601String();
+      for (final row in affected) {
+        final id = row['id'] as int;
+        final tags = row['tags'] as String?;
+        final mergedTags = mergedBookTags(tags, from, into);
+        await txn.update(
+          'booksTable',
+          {'tags': mergedTags, 'date_modified': dateModified},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
+      return affected.length;
+    });
   }
 
   Future<List<Book>> getBooksWithSameTag(String tag) async {

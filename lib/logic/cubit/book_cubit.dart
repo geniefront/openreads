@@ -84,6 +84,14 @@ class BookCubit extends Cubit {
     getAllBooks();
   }
 
+  Future<int> mergeTags(String from, String into, Set<int> expectedIds) async {
+    final updated = await repository.mergeTags(from, into, expectedIds);
+    await getAllBooksByStatus();
+    await getAllBooks();
+    return updated;
+  }
+
+
   Future<void> getAllBooks({
     bool getTags = true,
     bool getAuthors = true,

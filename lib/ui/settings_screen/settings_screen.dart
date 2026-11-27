@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:openreads/ui/settings_screen/widgets/merge_book_tags_dialog.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
@@ -551,6 +552,28 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  SettingsTile _buildMergeTags() {
+    return SettingsTile.navigation(
+      title: const Text('Merge book tags', style: TextStyle(fontSize: 16)),
+      leading: const Icon(Icons.merge_type),
+      onPressed: (context) async {
+        final count = await showDialog<int>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const MergeBookTagsDialog(),
+        );
+        if (count == null || !context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Updated $count book${count == 1 ? '' : 's'} with the new tag.',
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   SettingsTile _buildDefaultTags(BuildContext context) {
     return SettingsTile.navigation(
       title: Text(
@@ -738,6 +761,7 @@ class SettingsScreen extends StatelessWidget {
                           _buildDefaultBooksFormat(context),
                           _buildTabOrderSetting(context),
                           _buildDefaultTags(context),
+                          _buildMergeTags(),
                           _buildDownloadMissingCovers(context),
                         ],
                       ),

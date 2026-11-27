@@ -30,6 +30,9 @@ class Repository {
 
   Future bulkUpdateBookAuthor(Set<int> ids, String author) =>
       dbController.bulkUpdateBookAuthor(ids, author);
+  
+  Future<int> mergeTags(String from, String into, Set<int> expectedIds) =>
+      dbController.mergeTags(from, into, expectedIds);
 
   Future deleteBook(int index) => dbController.deleteBook(index);
 
