@@ -14,4 +14,8 @@ void main() {
     expect(mergedBookTags(null, 'tech', 'technology'), isNull);
     expect(mergedBookTags('tech', 'tech', 'tech'), 'tech');
   });
+
+  test('removes the source if the target is empty', () {
+    expect(mergedBookTags('tech||||travel', 'tech', ''), '||||travel');
+  });
 }
