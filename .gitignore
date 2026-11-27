@@ -117,3 +117,5 @@ lint/tmp/
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode
+# Widget Preview related
+.widget_preview/

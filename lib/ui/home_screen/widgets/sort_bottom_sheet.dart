@@ -427,6 +427,12 @@ class _SortBottomSheetState extends State<SortBottomSheet> {
         ),
         const SizedBox(height: 5),
         _buildBookTypeFilter(bookStatus, sortState.bookType),
+        FilterChip(
+          label: const Text('200 pages or fewer'),
+          selected: sortState.shortBooksOnly,
+          onSelected: (enabled) => _getBlocProvider(bookStatus)
+              .add(ChangeShortBooksOnlyEvent(enabled)),
+        ),
         if (bookStatus == BookStatus.read)
           _buildFilterByFinishYears(bookStatus, sortState.years),
         _buildFilterByTags(bookStatus, sortState.tags),

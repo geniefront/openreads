@@ -326,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
     AppBar appBar = AppBar(
       elevation: 0,
       scrolledUnderElevation: 0,
-      title: const Row(
+      title: Row(
         children: [
           Text(
             Constants.appName,

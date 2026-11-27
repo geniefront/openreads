@@ -15,6 +15,14 @@ class ChangeSortTypeEvent extends SortEvent {
   List<Object?> get props => [sortType];
 }
 
+class ChangeShortBooksOnlyEvent extends SortEvent {
+  const ChangeShortBooksOnlyEvent(this.enabled);
+  final bool enabled;
+
+  @override
+  List<Object?> get props => [enabled];
+}
+
 class ToggleOrderEvent extends SortEvent {
   const ToggleOrderEvent();
 

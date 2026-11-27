@@ -12,6 +12,7 @@ class SortState extends Equatable {
     required this.filterTagsAsAnd,
     this.bookType,
     this.filterOutTags = false,
+    this.shortBooksOnly = false,
     this.ignoreArticles = false,
   });
 
@@ -23,6 +24,7 @@ class SortState extends Equatable {
   final bool filterTagsAsAnd;
   final BookFormat? bookType;
   final bool filterOutTags;
+  final bool shortBooksOnly;
   final bool ignoreArticles;
 
   SortState copyWith({
@@ -37,6 +39,7 @@ class SortState extends Equatable {
     BookFormat? bookType,
     bool resetBookType = false,
     bool? filterOutTags,
+    bool? shortBooksOnly,
     bool? ignoreArticles,
   }) {
     return SortState(
@@ -48,6 +51,7 @@ class SortState extends Equatable {
       filterTagsAsAnd: filterTagsAsAnd ?? this.filterTagsAsAnd,
       bookType: resetBookType ? null : bookType ?? this.bookType,
       filterOutTags: filterOutTags ?? this.filterOutTags,
+      shortBooksOnly: shortBooksOnly ?? this.shortBooksOnly,
       ignoreArticles: ignoreArticles ?? this.ignoreArticles,
     );
   }
@@ -76,6 +80,7 @@ class SortState extends Equatable {
       filterTagsAsAnd: filterTagsAsAnd,
       bookType: bookType == null ? null : BookFormat.values.byName(bookType),
       filterOutTags: filterOutTags,
+      shortBooksOnly: json['short_books_only'] == true,
       ignoreArticles: ignoreArticles,
     );
   }
@@ -90,6 +95,7 @@ class SortState extends Equatable {
       'filter_tags_as_and': filterTagsAsAnd,
       'filter_book_type': bookType?.name,
       'filter_out_tags': filterOutTags,
+      'short_books_only': shortBooksOnly,
       'ignore_articles': ignoreArticles,
     };
   }
@@ -104,6 +110,7 @@ class SortState extends Equatable {
         filterTagsAsAnd,
         bookType,
         filterOutTags,
+        shortBooksOnly,
         ignoreArticles,
       ];
 }

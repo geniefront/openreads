@@ -16,6 +16,9 @@ class SortUnfinishedBooksBloc extends HydratedBloc<SortEvent, SortState> {
             bookType: null,
           ),
         ) {
+    on<ChangeShortBooksOnlyEvent>(
+      (event, emit) => emit(state.copyWith(shortBooksOnly: event.enabled)),
+    );
     on<ChangeSortTypeEvent>(
       (event, emit) => emit(state.copyWith(sortType: event.sortType)),
     );
