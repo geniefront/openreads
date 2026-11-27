@@ -1,0 +1,311 @@
+diff --git a/lib/core/helpers/merge_book_tags.dart b/lib/core/helpers/merge_book_tags.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..62567a158fc40f400ebbdd2104a7989c033c09b4
+--- /dev/null
++++ b/lib/core/helpers/merge_book_tags.dart
+@@ -0,0 +1,22 @@
++const bookTagSeparator = '|||||';
++
++List<String> bookTagNames(String? stored) => stored == null || stored.isEmpty
++    ? const []
++    : stored.split(bookTagSeparator);
++
++String? mergedBookTags(String? stored, String from, String into) {
++  final original = bookTagNames(stored);
++  if (from == into || !original.contains(from)) return stored;
++
++  final result = <String>[];
++  var addedTarget = false;
++  for (final tag in original) {
++    if (tag == from || tag == into) {
++      if (!addedTarget) result.add(into);
++      addedTarget = true;
++    } else {
++      result.add(tag);
++    }
++  }
++  return result.join(bookTagSeparator);
++}
+diff --git a/lib/database/database_controler.dart b/lib/database/database_controler.dart
+index 4e99ed30070154213d1f550baf47f8efd657a41c..b58471946007261220cf3c14ec9f2b6947ca8ea2 100644
+--- a/lib/database/database_controler.dart
++++ b/lib/database/database_controler.dart
+@@ -1,4 +1,5 @@
+ import 'package:openreads/core/constants/enums/enums.dart';
++import 'package:openreads/core/helpers/merge_book_tags.dart';
+ import 'package:openreads/database/database_provider.dart';
+ import 'package:openreads/model/book.dart';
+ import 'package:sqflite/sqflite.dart';
+@@ -178,6 +179,41 @@ class DatabaseController {
+     return await batch.commit();
+   }
+ 
++  Future<int> mergeTags(String from, String into, Set<int> expectedIds) async {
++    final db = await dbClient.db;
++    return db.transaction((txn) async {
++      final rows = await txn.query(
++        'booksTable',
++        columns: ['id', 'tags'],
++        where: 'tags IS NOT NULL AND deleted = 0',
++      );
++      final affected = rows
++          .where((row) => bookTagNames(row['tags'] as String?).contains(from))
++          .toList();
++      final targetExists = rows
++          .any((row) => bookTagNames(row['tags'] as String?).contains(into));
++      if (from == into ||
++          !targetExists ||
++          affected.length != expectedIds.length ||
++          affected.any((row) => !expectedIds.contains(row['id']))) {
++        throw StateError('The merge preview is stale.');
++      }
++      final dateModified = DateTime.now().toIso8601String();
++      for (final row in affected) {
++        await txn.update(
++          'booksTable',
++          {
++            'tags': mergedBookTags(row['tags'] as String?, from, into),
++            'date_modified': dateModified,
++          },
++          where: 'id = ?',
++          whereArgs: [row['id']],
++        );
++      }
++      return affected.length;
++    });
++  }
++
+   Future<List<Book>> getBooksWithSameTag(String tag) async {
+     final db = await dbClient.db;
+ 
+diff --git a/lib/logic/cubit/book_cubit.dart b/lib/logic/cubit/book_cubit.dart
+index 329207c7ae46715787d7b74eea86c41b5f761bef..c10ab7f74224f6a64292e1edc78176ee454df778 100644
+--- a/lib/logic/cubit/book_cubit.dart
++++ b/lib/logic/cubit/book_cubit.dart
+@@ -80,6 +80,13 @@ class BookCubit extends Cubit {
+     getAllBooks();
+   }
+ 
++  Future<int> mergeTags(String from, String into, Set<int> expectedIds) async {
++    final updated = await repository.mergeTags(from, into, expectedIds);
++    await getAllBooksByStatus();
++    await getAllBooks();
++    return updated;
++  }
++
+   Future<void> getAllBooks({
+     bool getTags = true,
+     bool getAuthors = true,
+diff --git a/lib/resources/repository.dart b/lib/resources/repository.dart
+index 511e2265ec7eb3d32e170283a8fbdebcd0f6ad3e..b44c65b950444fb31bc3f82b1b5f0f68fba1eaf8 100644
+--- a/lib/resources/repository.dart
++++ b/lib/resources/repository.dart
+@@ -31,6 +31,9 @@ class Repository {
+   Future bulkUpdateBookAuthor(Set<int> ids, String author) =>
+       dbController.bulkUpdateBookAuthor(ids, author);
+ 
++  Future<int> mergeTags(String from, String into, Set<int> expectedIds) =>
++      dbController.mergeTags(from, into, expectedIds);
++
+   Future deleteBook(int index) => dbController.deleteBook(index);
+ 
+   Future<Book?> getBook(int index) => dbController.getBook(index);
+diff --git a/lib/ui/settings_screen/settings_screen.dart b/lib/ui/settings_screen/settings_screen.dart
+index db5d68b8b3b478af286651af5441abe911f68e6b..53c60cfe27f2f5f3766ae0a875ba0dfbf9ff726e 100644
+--- a/lib/ui/settings_screen/settings_screen.dart
++++ b/lib/ui/settings_screen/settings_screen.dart
+@@ -2,6 +2,7 @@ import 'dart:io';
+ 
+ import 'package:easy_localization/easy_localization.dart';
+ import 'package:flutter/material.dart';
++import 'package:openreads/ui/settings_screen/widgets/merge_book_tags_dialog.dart';
+ import 'package:flutter_bloc/flutter_bloc.dart';
+ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+ import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
+@@ -529,6 +530,24 @@ class SettingsScreen extends StatelessWidget {
+     );
+   }
+ 
++  SettingsTile _buildMergeTags() {
++    return SettingsTile.navigation(
++      title: const Text('Merge book tags', style: TextStyle(fontSize: 16)),
++      leading: const Icon(Icons.merge_type),
++      onPressed: (context) async {
++        final count = await showDialog<int>(
++          context: context,
++          barrierDismissible: false,
++          builder: (_) => const MergeBookTagsDialog(),
++        );
++        if (count == null || !context.mounted) return;
++        ScaffoldMessenger.of(context).showSnackBar(
++          SnackBar(content: Text('Updated $count book(s).')),
++        );
++      },
++    );
++  }
++
+   SettingsTile _buildDefaultTags(BuildContext context) {
+     return SettingsTile.navigation(
+       title: Text(
+@@ -716,6 +735,7 @@ class SettingsScreen extends StatelessWidget {
+                           _buildDefaultBooksFormat(context),
+                           _buildTabOrderSetting(context),
+                           _buildDefaultTags(context),
++                          _buildMergeTags(),
+                           _buildDownloadMissingCovers(context),
+                         ],
+                       ),
+diff --git a/lib/ui/settings_screen/widgets/merge_book_tags_dialog.dart b/lib/ui/settings_screen/widgets/merge_book_tags_dialog.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..627e02fe665b3209264e4bb155b54c145eef7dd1
+--- /dev/null
++++ b/lib/ui/settings_screen/widgets/merge_book_tags_dialog.dart
+@@ -0,0 +1,125 @@
++import 'package:flutter/material.dart';
++import 'package:openreads/core/helpers/merge_book_tags.dart';
++import 'package:openreads/main.dart';
++import 'package:openreads/model/book.dart';
++
++class MergeBookTagsDialog extends StatefulWidget {
++  const MergeBookTagsDialog({super.key});
++
++  @override
++  State<MergeBookTagsDialog> createState() => _MergeBookTagsDialogState();
++}
++
++class _MergeBookTagsDialogState extends State<MergeBookTagsDialog> {
++  String? _from;
++  String? _into;
++  bool _saving = false;
++  String? _error;
++
++  Future<void> _merge(Set<int> ids) async {
++    setState(() {
++      _saving = true;
++      _error = null;
++    });
++    try {
++      final changed = await bookCubit.mergeTags(_from!, _into!, ids);
++      if (mounted) Navigator.of(context).pop(changed);
++    } on StateError {
++      if (mounted) {
++        setState(() {
++          _saving = false;
++          _error = 'The library changed. Close and reopen this preview.';
++        });
++      }
++    } catch (_) {
++      if (mounted) {
++        setState(() {
++          _saving = false;
++          _error = 'The merge could not be saved. Check the library and retry.';
++        });
++      }
++    }
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return StreamBuilder<List<Book>>(
++      stream: bookCubit.allBooks,
++      builder: (context, snapshot) {
++        final books = snapshot.data ?? const <Book>[];
++        final tags = books
++            .expand((book) => bookTagNames(book.tags))
++            .where((tag) => tag.trim().isNotEmpty)
++            .toSet()
++            .toList()
++          ..sort();
++        final ids = books
++            .where((book) => bookTagNames(book.tags).contains(_from))
++            .map((book) => book.id)
++            .whereType<int>()
++            .toSet();
++        final ready = !_saving && tags.contains(_into) &&
++            _from != _into && ids.isNotEmpty;
++        return PopScope(
++          canPop: !_saving,
++          child: AlertDialog(
++            title: const Text('Merge book tags'),
++            scrollable: true,
++            content: Column(
++              mainAxisSize: MainAxisSize.min,
++              crossAxisAlignment: CrossAxisAlignment.start,
++              children: [
++                if (tags.length < 2)
++                  const Text('Add two different book tags to use this action.'),
++                if (tags.length >= 2) ...[
++                  _tagPicker('From tag', _from, tags, (value) {
++                    setState(() {
++                      _from = value;
++                      if (_from == _into) _into = null;
++                    });
++                  }),
++                  _tagPicker('Keep tag', _into,
++                      tags.where((tag) => tag != _from).toList(), (value) {
++                    setState(() => _into = value);
++                  }),
++                  if (_from != null && _into != null)
++                    Text('${ids.length} book(s) will use "$_into" instead of "$_from".'),
++                ],
++                if (_error != null) Text(_error!),
++              ],
++            ),
++            actions: [
++              TextButton(
++                onPressed: _saving ? null : () => Navigator.of(context).pop(),
++                child: const Text('Cancel'),
++              ),
++              FilledButton(
++                onPressed: ready ? () => _merge(ids) : null,
++                child: Text(_saving ? 'Saving…' : 'Merge tags'),
++              ),
++            ],
++          ),
++        );
++      },
++    );
++  }
++
++  Widget _tagPicker(
++    String hint,
++    String? value,
++    List<String> tags,
++    ValueChanged<String?> onChanged,
++  ) => DropdownButton<String>(
++        isExpanded: true,
++        hint: Text(hint),
++        value: tags.contains(value) ? value : null,
++        onChanged: _saving ? null : onChanged,
++        items: [
++          for (final tag in tags)
++            DropdownMenuItem(
++              value: tag,
++              child: Text(tag, overflow: TextOverflow.ellipsis),
++            ),
++        ],
++      );
++}
+diff --git a/test/merge_book_tags_test.dart b/test/merge_book_tags_test.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..2991ed279aad5571a1128614f16f0674bde42bf9
+--- /dev/null
++++ b/test/merge_book_tags_test.dart
+@@ -0,0 +1,17 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:openreads/core/helpers/merge_book_tags.dart';
++
++void main() {
++  test('replaces the source and deduplicates the target in stable order', () {
++    expect(mergedBookTags('tech|||||travel|||||technology', 'tech', 'technology'),
++        'technology|||||travel');
++    expect(mergedBookTags('other|||||tech|||||tech', 'tech', 'technology'),
++        'other|||||technology');
++  });
++
++  test('preserves unaffected strings, empty values and partial matches', () {
++    expect(mergedBookTags('fintech', 'tech', 'technology'), 'fintech');
++    expect(mergedBookTags(null, 'tech', 'technology'), isNull);
++    expect(mergedBookTags('tech', 'tech', 'tech'), 'tech');
++  });
++}

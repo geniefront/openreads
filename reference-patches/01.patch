@@ -1,0 +1,269 @@
+diff --git a/lib/core/helpers/page_count_filter.dart b/lib/core/helpers/page_count_filter.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..d75221dfc77777062c18fc565a503426481f2685
+--- /dev/null
++++ b/lib/core/helpers/page_count_filter.dart
+@@ -0,0 +1,2 @@
++bool matchesPageLimit(int? pages, bool shortBooksOnly) =>
++    !shortBooksOnly || (pages != null && pages > 0 && pages <= 200);
+diff --git a/lib/logic/bloc/sort_bloc/sort_event.dart b/lib/logic/bloc/sort_bloc/sort_event.dart
+index 18f66ad0b7bf6ec80a41f9cc332a65341a6b06bf..1e64dd079b8e4cdf94c75afb628d4670116bfcd7 100644
+--- a/lib/logic/bloc/sort_bloc/sort_event.dart
++++ b/lib/logic/bloc/sort_bloc/sort_event.dart
+@@ -15,6 +15,15 @@ class ChangeSortTypeEvent extends SortEvent {
+   List<Object?> get props => [sortType];
+ }
+ 
++class ChangeShortBooksOnlyEvent extends SortEvent {
++  const ChangeShortBooksOnlyEvent(this.enabled);
++
++  final bool enabled;
++
++  @override
++  List<Object?> get props => [enabled];
++}
++
+ class ToggleOrderEvent extends SortEvent {
+   const ToggleOrderEvent();
+ 
+diff --git a/lib/logic/bloc/sort_bloc/sort_finished_books_bloc.dart b/lib/logic/bloc/sort_bloc/sort_finished_books_bloc.dart
+index 67d0dd8c4c56bf0d53a2ae70e0a099a3020d6594..dfdd7d5b4eec6bb8d26eaff8403294eaae46144c 100644
+--- a/lib/logic/bloc/sort_bloc/sort_finished_books_bloc.dart
++++ b/lib/logic/bloc/sort_bloc/sort_finished_books_bloc.dart
+@@ -16,6 +16,10 @@ class SortFinishedBooksBloc extends HydratedBloc<SortEvent, SortState> {
+             bookType: null,
+           ),
+         ) {
++    on<ChangeShortBooksOnlyEvent>(
++      (event, emit) => emit(state.copyWith(shortBooksOnly: event.enabled)),
++    );
++
+     on<ChangeSortTypeEvent>(
+       (event, emit) => emit(state.copyWith(sortType: event.sortType)),
+     );
+diff --git a/lib/logic/bloc/sort_bloc/sort_for_later_books_bloc.dart b/lib/logic/bloc/sort_bloc/sort_for_later_books_bloc.dart
+index cb10e46041602b061a6aaff2650b331f3ff1c16a..2a233429641fe29f4ee6912b293ed1516ef72dac 100644
+--- a/lib/logic/bloc/sort_bloc/sort_for_later_books_bloc.dart
++++ b/lib/logic/bloc/sort_bloc/sort_for_later_books_bloc.dart
+@@ -16,6 +16,10 @@ class SortForLaterBooksBloc extends HydratedBloc<SortEvent, SortState> {
+             bookType: null,
+           ),
+         ) {
++    on<ChangeShortBooksOnlyEvent>(
++      (event, emit) => emit(state.copyWith(shortBooksOnly: event.enabled)),
++    );
++
+     on<ChangeSortTypeEvent>(
+       (event, emit) => emit(state.copyWith(sortType: event.sortType)),
+     );
+diff --git a/lib/logic/bloc/sort_bloc/sort_in_progress_books_bloc.dart b/lib/logic/bloc/sort_bloc/sort_in_progress_books_bloc.dart
+index a5c97f9f3af4486e465d21a4fe30a71361e0acf4..88e4c603a2b4d21f5cb7af2748cffdce2845d480 100644
+--- a/lib/logic/bloc/sort_bloc/sort_in_progress_books_bloc.dart
++++ b/lib/logic/bloc/sort_bloc/sort_in_progress_books_bloc.dart
+@@ -16,6 +16,10 @@ class SortInProgressBooksBloc extends HydratedBloc<SortEvent, SortState> {
+             bookType: null,
+           ),
+         ) {
++    on<ChangeShortBooksOnlyEvent>(
++      (event, emit) => emit(state.copyWith(shortBooksOnly: event.enabled)),
++    );
++
+     on<ChangeSortTypeEvent>(
+       (event, emit) => emit(state.copyWith(sortType: event.sortType)),
+     );
+diff --git a/lib/logic/bloc/sort_bloc/sort_state.dart b/lib/logic/bloc/sort_bloc/sort_state.dart
+index 969e572f82ae92dec43961d4380ae46753b5fb2d..7a92f2d7f253f4bf0616945929bb22e8aadb7a01 100644
+--- a/lib/logic/bloc/sort_bloc/sort_state.dart
++++ b/lib/logic/bloc/sort_bloc/sort_state.dart
+@@ -12,6 +12,7 @@ class SortState extends Equatable {
+     required this.filterTagsAsAnd,
+     this.bookType,
+     this.filterOutTags = false,
++    this.shortBooksOnly = false,
+   });
+ 
+   final SortType sortType;
+@@ -22,6 +23,7 @@ class SortState extends Equatable {
+   final bool filterTagsAsAnd;
+   final BookFormat? bookType;
+   final bool filterOutTags;
++  final bool shortBooksOnly;
+ 
+   SortState copyWith({
+     SortType? sortType,
+@@ -35,6 +37,7 @@ class SortState extends Equatable {
+     BookFormat? bookType,
+     bool resetBookType = false,
+     bool? filterOutTags,
++    bool? shortBooksOnly,
+   }) {
+     return SortState(
+       sortType: sortType ?? this.sortType,
+@@ -45,6 +48,7 @@ class SortState extends Equatable {
+       filterTagsAsAnd: filterTagsAsAnd ?? this.filterTagsAsAnd,
+       bookType: resetBookType ? null : bookType ?? this.bookType,
+       filterOutTags: filterOutTags ?? this.filterOutTags,
++      shortBooksOnly: shortBooksOnly ?? this.shortBooksOnly,
+     );
+   }
+ 
+@@ -71,6 +75,7 @@ class SortState extends Equatable {
+       filterTagsAsAnd: filterTagsAsAnd,
+       bookType: bookType == null ? null : BookFormat.values.byName(bookType),
+       filterOutTags: filterOutTags,
++      shortBooksOnly: json['short_books_only'] == true,
+     );
+   }
+ 
+@@ -84,6 +89,7 @@ class SortState extends Equatable {
+       'filter_tags_as_and': filterTagsAsAnd,
+       'filter_book_type': bookType?.name,
+       'filter_out_tags': filterOutTags,
++      'short_books_only': shortBooksOnly,
+     };
+   }
+ 
+@@ -97,5 +103,6 @@ class SortState extends Equatable {
+         filterTagsAsAnd,
+         bookType,
+         filterOutTags,
++        shortBooksOnly,
+       ];
+ }
+diff --git a/lib/logic/bloc/sort_bloc/sort_unfinished_books_bloc.dart b/lib/logic/bloc/sort_bloc/sort_unfinished_books_bloc.dart
+index 49ecffbdf6a27f6d8a7032dcb2cd299c99be2ed5..cabbfb77c929da2604b9ab421205a448ec8348d0 100644
+--- a/lib/logic/bloc/sort_bloc/sort_unfinished_books_bloc.dart
++++ b/lib/logic/bloc/sort_bloc/sort_unfinished_books_bloc.dart
+@@ -16,6 +16,10 @@ class SortUnfinishedBooksBloc extends HydratedBloc<SortEvent, SortState> {
+             bookType: null,
+           ),
+         ) {
++    on<ChangeShortBooksOnlyEvent>(
++      (event, emit) => emit(state.copyWith(shortBooksOnly: event.enabled)),
++    );
++
+     on<ChangeSortTypeEvent>(
+       (event, emit) => emit(state.copyWith(sortType: event.sortType)),
+     );
+diff --git a/lib/ui/books_screen/books_screen.dart b/lib/ui/books_screen/books_screen.dart
+index 9009c4ba8aa77c26ae4381eb9daa286154fbccab..8aafd195a91917a22ad961c33db23a06266a4fb6 100644
+--- a/lib/ui/books_screen/books_screen.dart
++++ b/lib/ui/books_screen/books_screen.dart
+@@ -1,6 +1,7 @@
+ import 'package:diacritic/diacritic.dart';
+ import 'package:easy_localization/easy_localization.dart';
+ import 'package:flutter/material.dart';
++import 'package:openreads/core/helpers/page_count_filter.dart';
+ import 'package:flutter_bloc/flutter_bloc.dart';
+ import 'package:openreads/core/constants/enums/book_format.dart';
+ import 'package:openreads/core/constants/enums/book_status.dart';
+@@ -56,7 +57,13 @@ class _BooksScreenState extends State<BooksScreen>
+       list = _filterOutBookTypes(list, state.bookType!);
+     }
+ 
+-    return _sort(list: list, sortType: state.sortType, isAsc: state.isAsc);
++    return _sort(
++      list: state.shortBooksOnly
++          ? list.where((book) => matchesPageLimit(book.pages, true)).toList()
++          : list,
++      sortType: state.sortType,
++      isAsc: state.isAsc,
++    );
+   }
+ 
+   List<Book> _sortInProgressList({
+@@ -76,7 +83,13 @@ class _BooksScreenState extends State<BooksScreen>
+       list = _filterOutBookTypes(list, state.bookType!);
+     }
+ 
+-    return _sort(list: list, sortType: state.sortType, isAsc: state.isAsc);
++    return _sort(
++      list: state.shortBooksOnly
++          ? list.where((book) => matchesPageLimit(book.pages, true)).toList()
++          : list,
++      sortType: state.sortType,
++      isAsc: state.isAsc,
++    );
+   }
+ 
+   List<Book> _sortForLaterList({
+@@ -96,7 +109,13 @@ class _BooksScreenState extends State<BooksScreen>
+       list = _filterOutBookTypes(list, state.bookType!);
+     }
+ 
+-    return _sort(list: list, sortType: state.sortType, isAsc: state.isAsc);
++    return _sort(
++      list: state.shortBooksOnly
++          ? list.where((book) => matchesPageLimit(book.pages, true)).toList()
++          : list,
++      sortType: state.sortType,
++      isAsc: state.isAsc,
++    );
+   }
+ 
+   List<Book> _sortUnfinishedList({
+@@ -116,7 +135,13 @@ class _BooksScreenState extends State<BooksScreen>
+       list = _filterOutBookTypes(list, state.bookType!);
+     }
+ 
+-    return _sort(list: list, sortType: state.sortType, isAsc: state.isAsc);
++    return _sort(
++      list: state.shortBooksOnly
++          ? list.where((book) => matchesPageLimit(book.pages, true)).toList()
++          : list,
++      sortType: state.sortType,
++      isAsc: state.isAsc,
++    );
+   }
+ 
+   List<Book> _filterOutFav({required List<Book> list}) {
+diff --git a/lib/ui/home_screen/widgets/sort_bottom_sheet.dart b/lib/ui/home_screen/widgets/sort_bottom_sheet.dart
+index bfe0a48c30503623e40be239a3ae514c7537595f..a7195965642b2d8210d35afcf58be5f8413ed67c 100644
+--- a/lib/ui/home_screen/widgets/sort_bottom_sheet.dart
++++ b/lib/ui/home_screen/widgets/sort_bottom_sheet.dart
+@@ -425,6 +425,12 @@ class _SortBottomSheetState extends State<SortBottomSheet> {
+         ),
+         const SizedBox(height: 5),
+         _buildBookTypeFilter(bookStatus, sortState.bookType),
++        FilterChip(
++          label: const Text('200 pages or fewer'),
++          selected: sortState.shortBooksOnly,
++          onSelected: (enabled) =>
++              _getBlocProvider(bookStatus).add(ChangeShortBooksOnlyEvent(enabled)),
++        ),
+         if (bookStatus == BookStatus.read)
+           _buildFilterByFinishYears(bookStatus, sortState.years),
+         _buildFilterByTags(bookStatus, sortState.tags),
+diff --git a/test/page_count_filter_test.dart b/test/page_count_filter_test.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..1d81c9abcf8c6405baabaa7eeaa41551c4d0e50e
+--- /dev/null
++++ b/test/page_count_filter_test.dart
+@@ -0,0 +1,27 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:openreads/core/helpers/page_count_filter.dart';
++import 'package:openreads/logic/bloc/sort_bloc/sort_state.dart';
++
++void main() {
++  test('includes the 200-page boundary but excludes unknown page counts', () {
++    expect([null, 0, 1, 200, 201].where((n) => matchesPageLimit(n, true)),
++        [1, 200]);
++    expect(matchesPageLimit(null, false), isTrue);
++  });
++
++  test('older sort state loads with the filter off and new state round-trips',
++      () {
++    final old = {
++      'sort_type': 0,
++      'sort_order': true,
++      'only_favourite': false,
++      'filter_tags_as_and': false,
++      'filter_out_tags': false,
++    };
++    final state = SortState.fromJson(old);
++    expect(state.shortBooksOnly, isFalse);
++    final enabled = state.copyWith(shortBooksOnly: true);
++    expect(enabled, isNot(state));
++    expect(SortState.fromJson(enabled.toJson()!), enabled);
++  });
++}

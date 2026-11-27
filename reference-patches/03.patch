@@ -1,0 +1,263 @@
+diff --git a/lib/core/helpers/monthly_reading_goal.dart b/lib/core/helpers/monthly_reading_goal.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..73d3cb0ee7203387ae1b1f2bcc5ca9f013628702
+--- /dev/null
++++ b/lib/core/helpers/monthly_reading_goal.dart
+@@ -0,0 +1,12 @@
++import 'package:openreads/model/book.dart';
++
++int booksFinishedInMonth(Iterable<Book> books, DateTime month) =>
++    books.where((book) {
++      if (book.deleted) return false;
++      return book.readings.any((reading) {
++        final finish = reading.finishDate?.toLocal();
++        return finish != null &&
++            finish.year == month.year &&
++            finish.month == month.month;
++      });
++    }).length;
+diff --git a/lib/ui/statistics_screen/statistics_screen.dart b/lib/ui/statistics_screen/statistics_screen.dart
+index b140a9385a6f37e5771ff1561aa402a9a3fb6736..2482dcfe6906e602a24710753a7545e479235c91 100644
+--- a/lib/ui/statistics_screen/statistics_screen.dart
++++ b/lib/ui/statistics_screen/statistics_screen.dart
+@@ -60,6 +60,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
+                             if (state is StatsLoaded) {
+                               return Statistics(
+                                 state: state,
++                                books: snapshot.data!,
+                                 setChallenge: _setChallenge,
+                               );
+                             } else if (state is StatsError) {
+diff --git a/lib/ui/statistics_screen/widgets/monthly_reading_goal_card.dart b/lib/ui/statistics_screen/widgets/monthly_reading_goal_card.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..966fc74e83889c0fb646263e66a73e0a6d2c57bc
+--- /dev/null
++++ b/lib/ui/statistics_screen/widgets/monthly_reading_goal_card.dart
+@@ -0,0 +1,153 @@
++import 'package:flutter/material.dart';
++import 'package:intl/intl.dart';
++import 'package:openreads/core/helpers/monthly_reading_goal.dart';
++import 'package:openreads/model/book.dart';
++import 'package:shared_preferences/shared_preferences.dart';
++
++class MonthlyReadingGoalCard extends StatefulWidget {
++  const MonthlyReadingGoalCard({super.key, required this.books});
++
++  final List<Book> books;
++
++  @override
++  State<MonthlyReadingGoalCard> createState() => _MonthlyReadingGoalCardState();
++}
++
++class _MonthlyReadingGoalCardState extends State<MonthlyReadingGoalCard> {
++  static const _defaultGoal = 4;
++  static const _preference = 'monthlyBookGoal';
++  final _preferences = SharedPreferencesAsync();
++  late final Future<int> _storedGoal = _loadGoal();
++
++  int? _editedGoal;
++  bool _saving = false;
++
++  Future<int> _loadGoal() async {
++    final goal = await _preferences.getInt(_preference);
++    return goal != null && goal > 0 && goal <= 99 ? goal : _defaultGoal;
++  }
++
++  Future<void> _editGoal(int current) async {
++    final goal = await showDialog<int>(
++      context: context,
++      builder: (_) => _EditMonthlyGoalDialog(initialGoal: current),
++    );
++    if (!mounted || goal == null || goal == current) return;
++    setState(() => _saving = true);
++    try {
++      await _preferences.setInt(_preference, goal);
++      if (mounted) setState(() => _editedGoal = goal);
++    } catch (_) {
++      if (mounted) {
++        ScaffoldMessenger.of(context).showSnackBar(
++          const SnackBar(content: Text('Could not save the monthly goal.')),
++        );
++      }
++    } finally {
++      if (mounted) setState(() => _saving = false);
++    }
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final now = DateTime.now();
++    final finished = booksFinishedInMonth(widget.books, now);
++    return FutureBuilder<int>(
++      future: _storedGoal,
++      builder: (context, snapshot) {
++        if (snapshot.connectionState != ConnectionState.done) {
++          return const SizedBox.shrink();
++        }
++        final goal = _editedGoal ?? snapshot.data ?? _defaultGoal;
++        return Card(
++          child: Padding(
++            padding: const EdgeInsets.all(16),
++            child: Column(
++              crossAxisAlignment: CrossAxisAlignment.start,
++              children: [
++                Row(
++                  children: [
++                    Expanded(
++                      child: Text('Monthly reading goal',
++                          style: Theme.of(context).textTheme.titleMedium),
++                    ),
++                    TextButton(
++                      onPressed: _saving ? null : () => _editGoal(goal),
++                      child: const Text('Edit goal'),
++                    ),
++                  ],
++                ),
++                Text(DateFormat.yMMMM('en_US').format(now)),
++                const SizedBox(height: 8),
++                LinearProgressIndicator(
++                  value: (finished / goal).clamp(0.0, 1.0).toDouble(),
++                  semanticsLabel: 'Monthly reading goal',
++                  semanticsValue: '$finished of $goal books',
++                ),
++                const SizedBox(height: 8),
++                Text('$finished of $goal books'),
++              ],
++            ),
++          ),
++        );
++      },
++    );
++  }
++}
++
++class _EditMonthlyGoalDialog extends StatefulWidget {
++  const _EditMonthlyGoalDialog({required this.initialGoal});
++
++  final int initialGoal;
++
++  @override
++  State<_EditMonthlyGoalDialog> createState() => _EditMonthlyGoalDialogState();
++}
++
++class _EditMonthlyGoalDialogState extends State<_EditMonthlyGoalDialog> {
++  final _form = GlobalKey<FormState>();
++  late final _controller = TextEditingController(text: '${widget.initialGoal}');
++
++  @override
++  void dispose() {
++    _controller.dispose();
++    super.dispose();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return AlertDialog(
++      title: const Text('Edit monthly goal'),
++      content: Form(
++        key: _form,
++        child: TextFormField(
++          autofocus: true,
++          controller: _controller,
++          keyboardType: TextInputType.number,
++          decoration: const InputDecoration(labelText: 'Books per month'),
++          validator: (value) {
++            final number = int.tryParse(value?.trim() ?? '');
++            if (number == null || number < 1 || number > 99) {
++              return 'Enter a whole number from 1 to 99.';
++            }
++            return null;
++          },
++        ),
++      ),
++      actions: [
++        TextButton(
++          onPressed: () => Navigator.of(context).pop(),
++          child: const Text('Cancel'),
++        ),
++        FilledButton(
++          onPressed: () {
++            if (_form.currentState!.validate()) {
++              Navigator.of(context).pop(int.parse(_controller.text.trim()));
++            }
++          },
++          child: const Text('Save'),
++        ),
++      ],
++    );
++  }
++}
+diff --git a/lib/ui/statistics_screen/widgets/statistics.dart b/lib/ui/statistics_screen/widgets/statistics.dart
+index cb7969a24d5a9cab49cc335ace68c96a97954de2..7c1d862079b0d3ed3b954388739695e270fa8f35 100644
+--- a/lib/ui/statistics_screen/widgets/statistics.dart
++++ b/lib/ui/statistics_screen/widgets/statistics.dart
+@@ -2,16 +2,19 @@ import 'dart:convert';
+ 
+ import 'package:easy_localization/easy_localization.dart';
+ import 'package:flutter/material.dart';
++import 'package:openreads/ui/statistics_screen/widgets/monthly_reading_goal_card.dart';
+ import 'package:flutter_bloc/flutter_bloc.dart';
+ import 'package:openreads/generated/locale_keys.g.dart';
+ import 'package:openreads/logic/bloc/challenge_bloc/challenge_bloc.dart';
+ import 'package:openreads/logic/bloc/stats_bloc/stats_bloc.dart';
+ 
+ import 'package:openreads/model/yearly_challenge.dart';
++import 'package:openreads/model/book.dart';
+ import 'package:openreads/ui/statistics_screen/widgets/widgets.dart';
+ 
+ class Statistics extends StatelessWidget {
+   final StatsLoaded state;
++  final List<Book> books;
+   final Function(
+     int books,
+     int pages,
+@@ -21,6 +24,7 @@ class Statistics extends StatelessWidget {
+   const Statistics({
+     super.key,
+     required this.state,
++    required this.books,
+     required this.setChallenge,
+   });
+ 
+@@ -85,6 +89,7 @@ class Statistics extends StatelessWidget {
+             child: Column(
+               mainAxisAlignment: MainAxisAlignment.start,
+               children: [
++                MonthlyReadingGoalCard(books: books),
+                 _buildBooksChallenge(context, state, null),
+                 _buildPagesChallenge(context, state, null),
+                 _buildAllBooksStat(context),
+diff --git a/test/monthly_reading_goal_test.dart b/test/monthly_reading_goal_test.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..9f3c9960c6585f52a7be1de3d8da69b12a51d33c
+--- /dev/null
++++ b/test/monthly_reading_goal_test.dart
+@@ -0,0 +1,28 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:openreads/core/helpers/monthly_reading_goal.dart';
++import 'package:openreads/model/book.dart';
++import 'package:openreads/model/reading.dart';
++
++void main() {
++  test('counts unique books finished in the chosen month', () {
++    final reread = Book.empty()
++      ..readings = [
++        Reading(finishDate: DateTime(2026, 11, 1)),
++        Reading(finishDate: DateTime(2026, 11, 30, 23, 59)),
++      ];
++    final next = Book.empty()
++      ..readings = [Reading(finishDate: DateTime(2026, 12, 1))];
++    final earlierYear = Book.empty()
++      ..readings = [Reading(finishDate: DateTime(2025, 11, 1))];
++    final deleted = Book.empty()
++      ..deleted = true
++      ..readings = [Reading(finishDate: DateTime(2026, 11, 8))];
++    expect(
++      booksFinishedInMonth(
++        [reread, next, earlierYear, deleted, Book.empty()],
++        DateTime(2026, 11, 15),
++      ),
++      1,
++    );
++  });
++}
